@@ -1,0 +1,7 @@
+build/
+.intellijPlatform
+.idea
+.gradle
+wrapper/
+bin
+gradle
