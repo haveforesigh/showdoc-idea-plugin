@@ -39,6 +39,14 @@ public class OpenApiDocParser {
         PsiClass[] classes = javaFile.getClasses();
 
         for (PsiClass psiClass : classes) {
+            if (psiClass.isEnum()) {
+                DocPageInfo page = generateEnumDocPage(psiClass);
+                if (page != null) {
+                    pages.add(page);
+                }
+                continue;
+            }
+
             boolean isController = hasAnnotation(psiClass, "org.springframework.web.bind.annotation.RestController") ||
                     hasAnnotation(psiClass, "org.springframework.stereotype.Controller");
 
@@ -628,6 +636,161 @@ public class OpenApiDocParser {
                 return text;
             }
         }
+        return "";
+    }
+
+    private static DocPageInfo generateEnumDocPage(PsiClass psiClass) {
+        PsiDocComment docComment = psiClass.getDocComment();
+        String title = psiClass.getName();
+        String description = "";
+
+        if (docComment != null) {
+            PsiElement[] descriptionElements = docComment.getDescriptionElements();
+            StringBuilder descBuilder = new StringBuilder();
+            for (PsiElement el : descriptionElements) {
+                descBuilder.append(el.getText());
+            }
+
+            String fullDesc = descBuilder.toString().trim();
+            if (!fullDesc.isEmpty()) {
+                String[] lines = fullDesc.split("\\r?\\n");
+                boolean foundTitle = false;
+                StringBuilder remainingDesc = new StringBuilder();
+
+                for (String line : lines) {
+                    String trimmedLine = line.trim();
+                    if (!foundTitle) {
+                        if (trimmedLine.isEmpty()) continue;
+                        title = trimmedLine;
+                        foundTitle = true;
+                    } else {
+                        remainingDesc.append(trimmedLine).append("\n");
+                    }
+                }
+
+                if (remainingDesc.length() > 0) {
+                    description = remainingDesc.toString().trim();
+                } else {
+                    description = title;
+                }
+            } else {
+                description = title;
+            }
+        } else {
+            description = title;
+        }
+
+        List<PsiEnumConstant> constants = new ArrayList<>();
+        for (PsiField field : psiClass.getFields()) {
+            if (field instanceof PsiEnumConstant) {
+                constants.add((PsiEnumConstant) field);
+            }
+        }
+
+        if (constants.isEmpty()) {
+            return null;
+        }
+
+        boolean hasArgs = false;
+        for (PsiEnumConstant constant : constants) {
+            if (constant.getArgumentList() != null && constant.getArgumentList().getExpressions().length > 0) {
+                hasArgs = true;
+                break;
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("**简要描述：**\n\n");
+        if (description.startsWith("-") || description.startsWith("*") || description.contains("\n")) {
+            sb.append(description).append("\n\n");
+        } else {
+            sb.append("- ").append(description).append("\n\n");
+        }
+
+        sb.append("**枚举值列表：**\n\n");
+        if (hasArgs) {
+            sb.append("| 枚举项 (Constant) | 构造参数 (Arguments) | 描述 (Description) |\n");
+            sb.append("|:---|:---|:---|\n");
+            for (PsiEnumConstant constant : constants) {
+                String name = constant.getName();
+                
+                List<String> argStrings = new ArrayList<>();
+                if (constant.getArgumentList() != null) {
+                    for (PsiExpression expr : constant.getArgumentList().getExpressions()) {
+                        argStrings.add("`" + expr.getText() + "`");
+                    }
+                }
+                String argsText = String.join(", ", argStrings);
+                if (argsText.isEmpty()) argsText = "-";
+
+                String descText = getEnumConstantDescription(constant);
+                if (descText.isEmpty()) descText = "-";
+
+                sb.append(String.format("|%s|%s|%s|\n", name, argsText, descText));
+            }
+        } else {
+            sb.append("| 枚举项 (Constant) | 描述 (Description) |\n");
+            sb.append("|:---|:---|\n");
+            for (PsiEnumConstant constant : constants) {
+                String name = constant.getName();
+                String descText = getEnumConstantDescription(constant);
+                if (descText.isEmpty()) descText = "-";
+
+                sb.append(String.format("|%s|%s|\n", name, descText));
+            }
+        }
+        sb.append("\n");
+
+        String catalog = getCatalogName(psiClass);
+        return new DocPageInfo(catalog, title, sb.toString());
+    }
+
+    private static String getEnumConstantDescription(PsiEnumConstant constant) {
+        PsiDocComment doc = constant.getDocComment();
+        if (doc != null) {
+            StringBuilder sb = new StringBuilder();
+            for (PsiElement el : doc.getDescriptionElements()) {
+                sb.append(el.getText().trim()).append(" ");
+            }
+            return sb.toString().trim();
+        }
+
+        // Check for preceding block or line comment
+        PsiElement sibling = constant.getPrevSibling();
+        while (sibling != null && !(sibling instanceof PsiComment) && !(sibling instanceof PsiEnumConstant)) {
+            sibling = sibling.getPrevSibling();
+        }
+        if (sibling instanceof PsiComment) {
+            String text = sibling.getText().trim();
+            if (text.startsWith("//")) {
+                return text.substring(2).trim();
+            } else if (text.startsWith("/*")) {
+                text = text.substring(2);
+                if (text.endsWith("*/")) {
+                    text = text.substring(0, text.length() - 2);
+                }
+                return text.trim();
+            }
+        }
+
+        // Check for trailing comment on the same line
+        PsiElement nextSibling = constant.getNextSibling();
+        while (nextSibling != null && !(nextSibling instanceof PsiComment) && !(nextSibling instanceof PsiEnumConstant) && !nextSibling.getText().contains("\n")) {
+            nextSibling = nextSibling.getNextSibling();
+        }
+        if (nextSibling instanceof PsiComment) {
+            String text = nextSibling.getText().trim();
+            if (text.startsWith("//")) {
+                return text.substring(2).trim();
+            } else if (text.startsWith("/*")) {
+                text = text.substring(2);
+                if (text.endsWith("*/")) {
+                    text = text.substring(0, text.length() - 2);
+                }
+                return text.trim();
+            }
+        }
+
         return "";
     }
 }
