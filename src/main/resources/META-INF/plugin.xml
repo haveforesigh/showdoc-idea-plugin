@@ -1,0 +1,29 @@
+<idea-plugin>
+    <id>com.showdoc.plugin.exporter</id>
+    <name>ShowDoc Exporter</name>
+    <vendor>ShowDoc Plugin Author</vendor>
+
+    <description>
+        <![CDATA[
+        A plugin to export Spring project API documentation to a local ShowDoc server.
+        ]]>
+    </description>
+
+    <!-- please see https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html
+         on how to target different products -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="com.showdoc.plugin.openapi.OpenApiSettings"/>
+        <applicationConfigurable parentId="tools" instance="com.showdoc.plugin.openapi.OpenApiSettingsConfigurable"
+                                 id="com.showdoc.plugin.openapi.OpenApiSettingsConfigurable" displayName="ShowDoc Open API"/>
+    </extensions>
+
+    <actions>
+        <action id="ShowDoc.PublishOpenApiAction" class="com.showdoc.plugin.openapi.PublishToShowDocOpenApiAction" text="Publish to ShowDoc (Open API)" description="Parse Java comments and publish as documents via ShowDoc Open API">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
